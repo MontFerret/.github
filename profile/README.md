@@ -19,9 +19,11 @@ Ferret system contains multiple tools and components.
 
 ## Contributors
 Thanks to everyone who contributed.
-<a href="https://github.com/MontFerret/ferret/graphs/contributors">
-<img src="https://contrib.rocks/image?repo=MontFerret/ferret" />
-</a>
+<p>
+    <a href="https://github.com/MontFerret/ferret/graphs/contributors">
+        <img src="https://contrib.rocks/image?repo=MontFerret/ferret" />
+    </a>
+</p>
 
 ## Financial support
 Support this project by becoming a sponsor. Your logo will show up here with a link to your website.
