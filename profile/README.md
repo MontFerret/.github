@@ -1,8 +1,10 @@
 # Welcome to Ferret!
 
-Ferret is a web scraping system. It aims to simplify data extraction from the web for UI testing, machine learning, analytics and more.    
-Ferret allows users to focus on the data. It abstracts away the technical details and complexity of underlying technologies using its own declarative language.    
-It is extremely flexible, powerful, easy to learn and use.
+Ferret is a powerful and flexible web scraping system designed to streamline data extraction for use cases like UI testing, machine learning, analytics, and more.
+
+With its own declarative language, Ferret allows you to focus on *what* data you need — not *how* to get it — by abstracting away the underlying complexity of browsers, networks, and protocols.
+
+Built to be easy to learn and use, Ferret lets you go from prototype to production with minimal effort, making it ideal for developers, testers, and data scientists alike.
 
 ## Where to start
 You can start by reading the [introduction post on our website](https://www.montferret.dev/blog/say-hello-to-ferret/) and get your hands dirty with the [getting started guide](https://www.montferret.dev/docs/getting-started/).
