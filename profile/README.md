@@ -1,23 +1,40 @@
-# Welcome to Ferret!
+# Welcome to Ferret
 
-Ferret is a powerful and flexible web scraping system designed to streamline data extraction for use cases like UI testing, machine learning, analytics, and more.
+Ferret is an open-source web data extraction system built around its own declarative language, runtime, and tooling.
 
-With its own declarative language, Ferret allows you to focus on *what* data you need — not *how* to get it — by abstracting away the underlying complexity of browsers, networks, and protocols.
+Instead of stitching together browser scripts, selectors, waits, and parsing logic by hand, Ferret lets you describe the data you want and the interactions needed to get it. This makes scraping, browser automation, UI testing, and structured data collection easier to write, easier to maintain, and easier to scale.
 
-Built to be easy to learn and use, Ferret lets you go from prototype to production with minimal effort, making it ideal for developers, testers, and data scientists alike.
+Ferret can be used as:
+- a query language for extracting and transforming web data
+- an embeddable runtime for integrating automation into applications
+- a set of tools for local development, testing, and distributed execution
 
-## Where to start
-You can start by reading the [introduction post on our website](https://www.montferret.dev/blog/say-hello-to-ferret/) and get your hands dirty with the [getting started guide](https://www.montferret.dev/docs/getting-started/).
+Whether you are prototyping a one-off script or building a production workflow, Ferret is designed to give you a higher-level way to work with the web.
+
+## Get started
+
+If you're new to Ferret, start here:
+
+- Read the [introduction post](https://www.montferret.dev/blog/say-hello-to-ferret/)
+- Follow the [getting started guide](https://www.montferret.dev/docs/getting-started/)
+- Try Ferret online in the [Playground](https://www.montferret.dev/try/)
 
 ## Ecosystem
-Ferret system contains multiple tools and components.    
-- [Ferret runtime](https://github.com/MontFerret/ferret) is the core of the system, containing the language parser and execution engine. It’s designed to be portable and embeddable, making it easy to integrate into any application.
-- [CLI](https://github.com/MontFerret/cli) is a command-line tool for running Ferret scripts directly from the terminal—ideal for quick testing, debugging, and automation workflows.
-- [Worker](https://github.com/MontFerret/worker) is an HTTP server that exposes Ferret as a service. Perfect for building scalable, distributed scraping and automation systems.
-- [Lab](https://github.com/MontFerret/lab) is test runner designed for writing and executing UI tests with Ferret scripts. Useful for building robust test suites and integrating them into CI/CD pipelines.
-- [Chromium](https://github.com/MontFerret/chromium) is a Dockerized, headless Chromium browser used by Ferret to execute scripts. It’s based on the latest Chromium build and optimized for headless environments.
-- [VS Code Syntax Highlighting](https://github.com/MontFerret/vscode-fql-syntax) provides syntax highlighting for the Ferret Query Language in Visual Studio Code, improving developer experience and productivity.
-- [Ferret Playground](https://www.montferret.dev/try/) is an interactive online environment where you can write, run, and share Ferret scripts—great for prototyping, learning, and collaboration.
+
+Ferret includes a growing ecosystem of tools and components:
+
+- [Ferret runtime](https://github.com/MontFerret/ferret) - the core language, compiler, and execution engine. It is designed to be portable, embeddable, and suitable for both standalone use and integration into larger systems.
+- [Contrib](https://github.com/MontFerret/contrib) - a collection of official extensions, integrations, and optional components built around the Ferret runtime. This is where ecosystem modules such as browser drivers and other add-ons can live without making the core heavier.
+- [CLI](https://github.com/MontFerret/cli) - a command-line interface for formatting, running, and working with Ferret scripts locally.
+- [Worker](https://github.com/MontFerret/worker) - an HTTP service for executing Ferret workloads remotely, useful for scalable and distributed deployments.
+- [Lab](https://github.com/MontFerret/lab) - a test runner for building UI and workflow tests with Ferret scripts, including CI-friendly automation scenarios.
+- [Chromium](https://github.com/MontFerret/chromium) - a Dockerized headless Chromium image tailored for Ferret-based browser execution.
+- [VS Code Syntax Highlighting](https://github.com/MontFerret/vscode-fql-syntax) - syntax highlighting support for the Ferret Query Language in Visual Studio Code.
+- [Ferret Playground](https://www.montferret.dev/try/) - an interactive environment for experimenting with Ferret scripts in the browser.
+
+## Learn more
+
+Visit the [documentation](https://www.montferret.dev/docs/introduction/) to learn more about the language, runtime, and tools.
 
 ## Contributors
 Thanks to everyone who contributed.
