@@ -1,0 +1,174 @@
+name: Notify website of a published release
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Published Git tag, including the leading v
+        required: true
+        type: string
+      release-url:
+        description: Public GitHub release URL
+        required: true
+        type: string
+      commit-sha:
+        description: Commit associated with the release
+        required: true
+        type: string
+    secrets:
+      FERRET_RELEASE_APP_CLIENT_ID:
+        required: true
+      FERRET_RELEASE_APP_PRIVATE_KEY:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    name: Notify website
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate release metadata and build dispatch payload
+        id: payload
+        shell: bash
+        env:
+          SOURCE_REPOSITORY: ${{ github.repository }}
+          SOURCE_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_URL: ${{ inputs.release-url }}
+          RELEASE_COMMIT_SHA: ${{ inputs.commit-sha }}
+        run: |
+          set -euo pipefail
+
+          fail() {
+            echo "::error title=Invalid release notification::$1"
+            exit 1
+          }
+
+          validate_text() {
+            local name="$1"
+            local value="$2"
+
+            if [[ -z "$value" ]]; then
+              fail "$name must not be empty."
+            fi
+
+            if jq -ne \
+              --arg value "$value" \
+              '$value | test("[[:cntrl:]]")' \
+              >/dev/null; then
+              fail "$name must not contain control characters."
+            fi
+          }
+
+          validate_text "Calling repository owner" "$SOURCE_REPOSITORY_OWNER"
+          validate_text "Calling repository" "$SOURCE_REPOSITORY"
+          validate_text "Release tag" "$RELEASE_TAG"
+          validate_text "Release URL" "$RELEASE_URL"
+          validate_text "Release commit SHA" "$RELEASE_COMMIT_SHA"
+
+          if [[ "$SOURCE_REPOSITORY_OWNER" != "MontFerret" ]]; then
+            fail "Calling repository owner must be MontFerret."
+          fi
+
+          repository_prefix="${SOURCE_REPOSITORY_OWNER}/"
+          if [[ "$SOURCE_REPOSITORY" != "$repository_prefix"* ]]; then
+            fail "Calling repository must belong to MontFerret."
+          fi
+
+          repository_name="${SOURCE_REPOSITORY#"$repository_prefix"}"
+          if [[ -z "$repository_name" || "$repository_name" == */* ]]; then
+            fail "Calling repository name must not be empty or contain a slash."
+          fi
+          if [[ ! "$repository_name" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            fail "Calling repository name is malformed."
+          fi
+
+          if [[ "$RELEASE_TAG" != v?* ]]; then
+            fail "Release tag must start with v and contain a tag name."
+          fi
+          if ! git check-ref-format "refs/tags/${RELEASE_TAG}" >/dev/null; then
+            fail "Release tag is not a valid Git tag name."
+          fi
+
+          expected_release_url="https://github.com/"
+          expected_release_url+="${SOURCE_REPOSITORY}/releases/tag/${RELEASE_TAG}"
+          if [[ "$RELEASE_URL" != "$expected_release_url" ]]; then
+            fail "Release URL must match the calling repository and tag."
+          fi
+
+          commit_pattern='^([0-9A-Fa-f]{40}|[0-9A-Fa-f]{64})$'
+          if [[ ! "$RELEASE_COMMIT_SHA" =~ $commit_pattern ]]; then
+            fail "Release commit SHA must be 40 or 64 hexadecimal characters."
+          fi
+
+          payload_path="${RUNNER_TEMP}/ferret-release-published.json"
+          jq --null-input --compact-output \
+            --arg repository "$SOURCE_REPOSITORY" \
+            --arg tag "$RELEASE_TAG" \
+            --arg release_url "$RELEASE_URL" \
+            --arg commit_sha "$RELEASE_COMMIT_SHA" \
+            '{
+              event_type: "ferret-release-published",
+              client_payload: {
+                repository: $repository,
+                tag: $tag,
+                release_url: $release_url,
+                commit_sha: $commit_sha
+              }
+            }' > "$payload_path"
+
+          payload_size="$(wc -c < "$payload_path" | tr -d '[:space:]')"
+          if (( payload_size >= 65536 )); then
+            fail "Dispatch payload must be smaller than 64 KiB."
+          fi
+
+          echo "path=$payload_path" >> "$GITHUB_OUTPUT"
+
+      - name: Create repository-scoped GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.FERRET_RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.FERRET_RELEASE_APP_PRIVATE_KEY }}
+          owner: MontFerret
+          repositories: montferret.github.io
+          permission-contents: write
+
+      - name: Dispatch release notification
+        shell: bash
+        env:
+          DISPATCH_PAYLOAD_PATH: ${{ steps.payload.outputs.path }}
+          FERRET_RELEASE_APP_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+
+          fail() {
+            echo "::error title=Website release dispatch failed::$1"
+            exit 1
+          }
+
+          response_body="$(mktemp)"
+          trap 'rm -f "$response_body"' EXIT
+
+          if ! http_status="$(
+            curl --silent --show-error \
+              --output "$response_body" \
+              --write-out '%{http_code}' \
+              --request POST \
+              --header 'Accept: application/vnd.github+json' \
+              --header "Authorization: Bearer ${FERRET_RELEASE_APP_TOKEN}" \
+              --header 'Content-Type: application/json' \
+              --header 'X-GitHub-Api-Version: 2026-03-10' \
+              --data-binary "@${DISPATCH_PAYLOAD_PATH}" \
+              'https://api.github.com/repos/MontFerret/montferret.github.io/dispatches'
+          )"; then
+            fail "GitHub API request could not be completed."
+          fi
+
+          if [[ "$http_status" != "204" ]]; then
+            fail "GitHub API returned unexpected HTTP ${http_status}."
+          fi
+
+          echo "Website release notification dispatched successfully."
