@@ -17,7 +17,7 @@ return for user in users {
 }
 ```
 
-Ferret started as a language for web scraping and browser automation. It has since grown into a general-purpose data automation language built around the same idea: **describe the data you want and let the runtime handle how to get it.**
+Ferret started as a language for web scraping and browser automation. It has since grown into a general-purpose data automation language built around the same idea: describe the data you want and let the runtime handle how to get it.
 
 Use Ferret from the command line, embed it into a Go or JavaScript application, extend it with modules, or run it as part of a larger service.
 
