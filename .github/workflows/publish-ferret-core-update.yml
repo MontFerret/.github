@@ -1,0 +1,257 @@
+name: Publish a Ferret Core dependency update
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Published Ferret Core v2 tag, including the leading v
+        required: true
+        type: string
+      base-sha:
+        description: Caller commit used to prepare and validate the dependency update
+        required: true
+        type: string
+    secrets:
+      FERRET_RELEASE_APP_CLIENT_ID:
+        required: true
+      FERRET_RELEASE_APP_PRIVATE_KEY:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish Ferret Core update
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate publication metadata
+        id: metadata
+        shell: bash
+        env:
+          BASE_SHA: ${{ inputs.base-sha }}
+          CALLING_REPOSITORY: ${{ github.repository }}
+          CALLING_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          FERRET_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          fail() {
+            echo "::error title=Invalid Ferret Core update::$1"
+            exit 1
+          }
+
+          validate_text() {
+            local name="$1"
+            local value="$2"
+
+            if [[ -z "$value" ]]; then
+              fail "$name must not be empty."
+            fi
+
+            if jq -ne \
+              --arg value "$value" \
+              '$value | test("[[:cntrl:]]")' \
+              >/dev/null; then
+              fail "$name must not contain control characters."
+            fi
+          }
+
+          validate_text "Calling repository owner" "$CALLING_REPOSITORY_OWNER"
+          validate_text "Calling repository" "$CALLING_REPOSITORY"
+          validate_text "Default branch" "$DEFAULT_BRANCH"
+          validate_text "Ferret version" "$FERRET_VERSION"
+          validate_text "Base commit SHA" "$BASE_SHA"
+
+          if [[ "$CALLING_REPOSITORY_OWNER" != "MontFerret" ]]; then
+            fail "Calling repository owner must be MontFerret."
+          fi
+
+          case "$CALLING_REPOSITORY" in
+            MontFerret/cli | MontFerret/lab | MontFerret/worker)
+              ;;
+            *)
+              fail "Calling repository is not approved for Ferret Core updates."
+              ;;
+          esac
+
+          repository_name="${CALLING_REPOSITORY#MontFerret/}"
+          if [[ -z "$repository_name" || "$repository_name" == */* ]]; then
+            fail "Calling repository name must not be empty or contain a slash."
+          fi
+          if [[ ! "$repository_name" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            fail "Calling repository name is malformed."
+          fi
+
+          semver_pattern='^v2\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'
+          if [[ ! "$FERRET_VERSION" =~ $semver_pattern ]]; then
+            fail "Ferret version must be a normalized v2 SemVer tag."
+          fi
+
+          commit_pattern='^([0-9A-Fa-f]{40}|[0-9A-Fa-f]{64})$'
+          if [[ ! "$BASE_SHA" =~ $commit_pattern ]]; then
+            fail "Base commit SHA must be 40 or 64 hexadecimal characters."
+          fi
+
+          if ! git check-ref-format "refs/heads/${DEFAULT_BRANCH}" >/dev/null; then
+            fail "Default branch is not a valid Git branch name."
+          fi
+
+          update_branch="deps/ferret-core-${FERRET_VERSION#v}"
+          if ! git check-ref-format --branch "$update_branch" >/dev/null; then
+            fail "Dependency update branch is not a valid Git branch name."
+          fi
+
+          echo "repository-name=$repository_name" >> "$GITHUB_OUTPUT"
+          echo "update-branch=$update_branch" >> "$GITHUB_OUTPUT"
+
+      - name: Download validated dependency files
+        uses: actions/download-artifact@v8
+        with:
+          name: ferret-core-dependency-update
+          path: ${{ runner.temp }}/ferret-core-dependency-update
+
+      - name: Validate dependency artifact
+        shell: bash
+        env:
+          ARTIFACT_PATH: ${{ runner.temp }}/ferret-core-dependency-update
+        run: |
+          set -euo pipefail
+
+          fail() {
+            echo "::error title=Invalid Ferret Core update artifact::$1"
+            exit 1
+          }
+
+          if [[ ! -f "$ARTIFACT_PATH/go.mod" || -L "$ARTIFACT_PATH/go.mod" ]]; then
+            fail "Artifact must contain a regular root-level go.mod file."
+          fi
+          if [[ ! -f "$ARTIFACT_PATH/go.sum" || -L "$ARTIFACT_PATH/go.sum" ]]; then
+            fail "Artifact must contain a regular root-level go.sum file."
+          fi
+
+          unexpected_entry="$(find "$ARTIFACT_PATH" -mindepth 1 -maxdepth 1 ! -name go.mod ! -name go.sum -print -quit)"
+          nested_entry="$(find "$ARTIFACT_PATH" -mindepth 2 -print -quit)"
+          if [[ -n "$unexpected_entry" || -n "$nested_entry" ]]; then
+            fail "Artifact may contain only root-level go.mod and go.sum files."
+          fi
+
+      - name: Create caller-scoped GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.FERRET_RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.FERRET_RELEASE_APP_PRIVATE_KEY }}
+          owner: MontFerret
+          repositories: ${{ steps.metadata.outputs.repository-name }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Checkout validated base commit
+        uses: actions/checkout@v7
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          ref: ${{ inputs.base-sha }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Apply dependency update
+        shell: bash
+        env:
+          ARTIFACT_PATH: ${{ runner.temp }}/ferret-core-dependency-update
+          BASE_SHA: ${{ inputs.base-sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+
+          fail() {
+            echo "::error title=Invalid Ferret Core update::$1"
+            exit 1
+          }
+
+          expected_base_sha="$(printf '%s' "$BASE_SHA" | tr '[:upper:]' '[:lower:]')"
+          checked_out_sha="$(git rev-parse HEAD)"
+          if [[ "$checked_out_sha" != "$expected_base_sha" ]]; then
+            fail "Checked out commit does not match the validated base commit."
+          fi
+
+          git fetch origin "refs/heads/${DEFAULT_BRANCH}:refs/remotes/origin/${DEFAULT_BRANCH}"
+          if ! git merge-base --is-ancestor "$checked_out_sha" "origin/${DEFAULT_BRANCH}"; then
+            fail "Base commit is not reachable from the current default branch."
+          fi
+
+          cp -- "$ARTIFACT_PATH/go.mod" go.mod
+          cp -- "$ARTIFACT_PATH/go.sum" go.sum
+          git add -- go.mod go.sum
+
+          staged_files="$(git diff --cached --name-only)"
+          if [[ -z "$staged_files" ]]; then
+            fail "Prepared artifact does not change go.mod or go.sum."
+          fi
+
+          while IFS= read -r staged_file; do
+            case "$staged_file" in
+              go.mod | go.sum)
+                ;;
+              *)
+                fail "Prepared artifact changed an unexpected file."
+                ;;
+            esac
+          done <<< "$staged_files"
+
+          if ! git diff --quiet; then
+            fail "Applying the artifact created unexpected unstaged changes."
+          fi
+
+          git diff --cached --check
+
+      - name: Commit and push update branch
+        shell: bash
+        env:
+          FERRET_VERSION: ${{ inputs.version }}
+          UPDATE_BRANCH: ${{ steps.metadata.outputs.update-branch }}
+        run: |
+          set -euo pipefail
+
+          git config user.name "ferret-release[bot]"
+          git config user.email "ferret-release[bot]@users.noreply.github.com"
+          git switch -c "$UPDATE_BRANCH"
+          git commit -m "chore(deps): update Ferret Core to ${FERRET_VERSION}"
+
+          remote_ref="refs/heads/${UPDATE_BRANCH}"
+          remote_line="$(git ls-remote --heads origin "$remote_ref")"
+          remote_sha="${remote_line%%[[:space:]]*}"
+          if [[ -n "$remote_sha" ]]; then
+            if [[ ! "$remote_sha" =~ ^([0-9A-Fa-f]{40}|[0-9A-Fa-f]{64})$ ]]; then
+              echo "::error title=Invalid dependency update branch::Could not resolve a single branch commit."
+              exit 1
+            fi
+            git push --force-with-lease="${remote_ref}:${remote_sha}" --set-upstream origin "HEAD:${remote_ref}"
+          else
+            git push --set-upstream origin "HEAD:${remote_ref}"
+          fi
+
+      - name: Create or reuse pull request
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          FERRET_VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          TARGET_REPOSITORY: ${{ github.repository }}
+          UPDATE_BRANCH: ${{ steps.metadata.outputs.update-branch }}
+        run: |
+          set -euo pipefail
+
+          existing_pr="$(gh pr list --repo "$TARGET_REPOSITORY" --state open --head "$UPDATE_BRANCH" --json url --jq '.[0].url // empty')"
+          if [[ -n "$existing_pr" ]]; then
+            echo "Updated existing pull request: $existing_pr"
+            exit 0
+          fi
+
+          gh pr create \
+            --repo "$TARGET_REPOSITORY" \
+            --base "$DEFAULT_BRANCH" \
+            --head "$UPDATE_BRANCH" \
+            --title "chore(deps): update Ferret Core to ${FERRET_VERSION}" \
+            --body "Automated Ferret Core dependency update triggered by Ferret Core release ${FERRET_VERSION}."
