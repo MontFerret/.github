@@ -49,7 +49,7 @@ Ferret started with web extraction and browser automation, but the core model is
 
 That separation lets the same language work with application objects, documents, APIs, databases, browser-backed pages, files, and custom resources without turning the language itself into a collection of hard-coded integrations.
 
-Ferret is especially useful when data logic should be **portable, reviewable, testable, and able to evolve independently from the host application**.
+Ferret is especially useful when data logic should be portable, reviewable, testable, and able to evolve independently from the host application.
 
 ## Ferret v2
 
